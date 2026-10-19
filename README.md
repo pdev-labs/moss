@@ -661,7 +661,7 @@ The build is checked at several levels:
 | Signature | `apksigner verify` passes for v1/v2/v3 and prints the expected certificate. |
 | Device | Installed on a Vivo V2437 (Android 16, arm64-v8a, unrooted); app launches, Settings opens, premium state persists across cold start. |
 
-The CI rebuild for commit `3cab067` (GitHub Actions run `39258043543`)
+The CI rebuild for commit `f0262fe` (GitHub Actions run `39262685376`)
 reproduced the v1.5 release asset byte-for-byte: both are 3,055,564 bytes with
 SHA-256 `17c834f3f73cfb8c9a3c29992da546ab262130663af93b5a01b8e891dad1edf7`.
 
