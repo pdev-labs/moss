@@ -89,7 +89,7 @@ The GitHub Actions artifact for a given commit is named **`moss-stable-apk`** an
 contains:
 
 - `moss-stable.apk` — the signed, aligned APK.
-- `patch-report.json` — a machine-readable record of every dex patch site,
+- `work/patch-report.json` — a machine-readable record of every dex patch site,
   including the old and new instruction bytes and verifier checks.
 
 ---
@@ -661,11 +661,16 @@ The build is checked at several levels:
 | Signature | `apksigner verify` passes for v1/v2/v3 and prints the expected certificate. |
 | Device | Installed on a Vivo V2437 (Android 16, arm64-v8a, unrooted); app launches, Settings opens, premium state persists across cold start. |
 
+The CI rebuild for commit `3cab067` (GitHub Actions run `39258043543`)
+reproduced the v1.5 release asset byte-for-byte: both are 3,055,564 bytes with
+SHA-256 `17c834f3f73cfb8c9a3c29992da546ab262130663af93b5a01b8e891dad1edf7`.
+
 Historical on-device checks for this build line:
 
 - Fresh install as `org.moss.app` succeeds alongside the original app.
 - System “App info” shows the name **Moss**.
-- Settings shows “You're a premium user” / “Advanced features”.
+- Settings opens without crashing and “Advanced features” is available; the
+  “You're a premium user” promotion tile is gone.
 - No `modyolo.com` toast on cold or warm start.
 - No `Out-of-order string_ids`, `Failure to verify dex file`, or
   `FATAL EXCEPTION` in logcat.
