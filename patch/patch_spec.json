@@ -1,0 +1,72 @@
+{
+  "patches": [
+    {
+      "name": "widgets_unlocked_force_true",
+      "reason": "q6/h1.g case for c2.r (widgets_unlocked): drop the null branch and set the result register to 1, so Boolean.valueOf(v3) is always TRUE regardless of stored value.",
+      "class": "Lq6/h1;",
+      "method": "g",
+      "match": {"kind": "if-testz", "bytes": "380d0600", "ordinal": 0},
+      "expect_next": {"kind": "invoke", "target_class": "Ljava/lang/Boolean;", "target_method": "booleanValue"},
+      "replace": {"kind": "bytes", "bytes": "12310000"}
+    },
+    {
+      "name": "widgets_unlocked_del_nullcheck",
+      "reason": "the removed branch no longer guards this call; nop it so a (possibly null) Boolean is never dereferenced.",
+      "class": "Lq6/h1;",
+      "method": "g",
+      "match": {"kind": "invoke", "bytes": "6e104b2d0d00", "ordinal": 0},
+      "replace": {"kind": "bytes", "bytes": "000000000000"}
+    },
+    {
+      "name": "widgets_unlocked_del_moveresult",
+      "reason": "its producing invoke was nop'd; a move-result must follow an invoke or the class fails to verify.",
+      "class": "Lq6/h1;",
+      "method": "g",
+      "match": {"kind": "move-result", "bytes": "0a03", "ordinal": 0},
+      "replace": {"kind": "bytes", "bytes": "0000"}
+    },
+    {
+      "name": "premium_unlocked_force_true",
+      "reason": "q6/h1.g case for c2.p (premium_unlocked): drop the null branch and set the result register to 1.",
+      "class": "Lq6/h1;",
+      "method": "g",
+      "match": {"kind": "if-testz", "bytes": "380d0600", "ordinal": 1},
+      "expect_next": {"kind": "invoke", "target_class": "Ljava/lang/Boolean;", "target_method": "booleanValue"},
+      "replace": {"kind": "bytes", "bytes": "12310000"}
+    },
+    {
+      "name": "premium_unlocked_del_nullcheck",
+      "reason": "the removed branch no longer guards this call; nop it.",
+      "class": "Lq6/h1;",
+      "method": "g",
+      "match": {"kind": "invoke", "bytes": "6e104b2d0d00", "ordinal": 1},
+      "replace": {"kind": "bytes", "bytes": "000000000000"}
+    },
+    {
+      "name": "premium_unlocked_del_moveresult",
+      "reason": "its producing invoke was nop'd; a move-result must follow an invoke.",
+      "class": "Lq6/h1;",
+      "method": "g",
+      "match": {"kind": "move-result", "bytes": "0a03", "ordinal": 1},
+      "replace": {"kind": "bytes", "bytes": "0000"}
+    },
+    {
+      "name": "sigcheck_cached_path_true",
+      "reason": "s6/h3.a() case 10 gates premium (i0.C == 'signature matches hardcoded fingerprint'). Both paths converge on Boolean.valueOf(v0) at rel+0x250. Replace the cached-path move-result v0 with const/4 v0,1 so the cached result is ignored and TRUE is returned.",
+      "class": "Ls6/h3;",
+      "method": "a",
+      "desc": "()Ljava/lang/Object;",
+      "match": {"kind": "move-result", "bytes": "0a00"},
+      "replace": {"kind": "bytes", "bytes": "1201"}
+    },
+    {
+      "name": "sigcheck_compute_path_true",
+      "reason": "on the compute path, replace 'move v0, v1' with const/4 v0,1 so Boolean.valueOf(v0) returns TRUE without touching the (possibly failing) signature comparison.",
+      "class": "Ls6/h3;",
+      "method": "a",
+      "desc": "()Ljava/lang/Object;",
+      "match": {"bytes": "0110"},
+      "replace": {"kind": "bytes", "bytes": "1201"}
+    }
+  ]
+}

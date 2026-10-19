@@ -1,0 +1,87 @@
+name: Build Respiro premium-unlock APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Locate Android build-tools (zipalign, apksigner)
+        id: sdk
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "SDK=$SDK"
+          if ! ls "$SDK"/build-tools/*/zipalign >/dev/null 2>&1; then
+            yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+            "$SDK/cmdline-tools/latest/bin/sdkmanager" "build-tools;34.0.0" >/dev/null
+          fi
+          BT="$(ls -d "$SDK"/build-tools/* | sort -V | tail -1)"
+          echo "bt=$BT" >> "$GITHUB_OUTPUT"
+          "$BT/zipalign" --version || true
+          "$BT/apksigner" --version
+
+      - name: Extract classes.dex and apply equal-length patches
+        run: |
+          mkdir -p work
+          python3 - <<'PY'
+          import zipfile
+          zipfile.ZipFile('base-original.apk').extract('classes.dex', 'work')
+          print('extracted classes.dex')
+          PY
+          python3 patch/dex_patch_bytes.py work/classes.dex \
+            --spec patch/patch_spec.json \
+            -o work/classes-final.dex \
+            --report work/patch-report.json
+          echo "patched dex sha256:"; sha256sum work/classes-final.dex
+
+      - name: Repack APK (swap classes.dex, drop old signature entries)
+        run: |
+          python3 patch/repack.py \
+            --apk base-original.apk \
+            --dex classes.dex=work/classes-final.dex \
+            --out work/unsigned.apk \
+            --no-sign
+
+      - name: zipalign
+        run: |
+          BT="${{ steps.sdk.outputs.bt }}"
+          "$BT/zipalign" -p -f 4 work/unsigned.apk work/aligned.apk
+          "$BT/zipalign" -c -p 4 work/aligned.apk && echo "alignment OK"
+
+      - name: Sign (v1+v2+v3)
+        run: |
+          BT="${{ steps.sdk.outputs.bt }}"
+          "$BT/apksigner" sign \
+            --ks keystore/respiro.keystore \
+            --ks-pass pass:respiro123 \
+            --key-pass pass:respiro123 \
+            --ks-key-alias respiro \
+            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+            --out respiro-premium-unlocked-1.5.apk work/aligned.apk
+          "$BT/apksigner" verify --print-certs --verbose \
+            --min-sdk-version 21 --max-sdk-version 36 respiro-premium-unlocked-1.5.apk
+          echo "apk sha256:"; sha256sum respiro-premium-unlocked-1.5.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: respiro-premium-unlocked-apk
+          path: |
+            respiro-premium-unlocked-1.5.apk
+            work/patch-report.json
+          if-no-files-found: error
