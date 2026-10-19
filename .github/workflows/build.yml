@@ -51,11 +51,18 @@ jobs:
 
       - name: Repack APK (swap classes.dex, drop old signature entries)
         run: |
-          python3 patch/repack.py \
-            --apk base-original.apk \
-            --dex classes.dex=work/classes-final.dex \
-            --out work/repacked.apk \
-            --no-sign
+          python3 patch/repack_simple.py base-original.apk work/classes-final.dex work/repacked.apk
+          python3 - <<'PY'
+          import zipfile
+          z = zipfile.ZipFile('work/repacked.apk')
+          names = [i.filename for i in z.infolist()]
+          print('entries:', len(names))
+          assert len(names) == len(set(names)), 'duplicate zip entries!'
+          assert 'META-INF/ANDROIDD.RSA' not in names and 'META-INF/MANIFEST.MF' not in names
+          i = z.getinfo('classes.dex')
+          print('classes.dex method=%d size=%d' % (i.compress_type, i.file_size))
+          print('resources.arsc method=%d (0=STORED)' % z.getinfo('resources.arsc').compress_type)
+          PY
 
       - name: zipalign
         run: |
