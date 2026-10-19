@@ -64,10 +64,17 @@ jobs:
           print('resources.arsc method=%d (0=STORED)' % z.getinfo('resources.arsc').compress_type)
           PY
 
+      - name: Rebrand (package id + visible app name in binary manifest)
+        run: |
+          python3 patch/rebrand_axml.py work/repacked.apk work/rebranded.apk \
+            --package org.moss.app --label Moss
+          echo "== manifest after rebrand =="
+          python3 patch/rebrand_axml.py work/rebranded.apk --dump
+
       - name: zipalign
         run: |
           BT="${{ steps.sdk.outputs.bt }}"
-          "$BT/zipalign" -p -f 4 work/repacked.apk work/aligned.apk
+          "$BT/zipalign" -p -f 4 work/rebranded.apk work/aligned.apk
           "$BT/zipalign" -c -p 4 work/aligned.apk && echo "alignment OK"
 
       - name: Sign (v1+v2+v3)
@@ -79,16 +86,16 @@ jobs:
             --key-pass pass:respiro123 \
             --ks-key-alias respiro \
             --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
-            --out respiro-premium-unlocked-1.5.apk work/aligned.apk
+            --out moss-test-no-publish.apk work/aligned.apk
           "$BT/apksigner" verify --print-certs --verbose \
-            --min-sdk-version 21 --max-sdk-version 36 respiro-premium-unlocked-1.5.apk
-          echo "apk sha256:"; sha256sum respiro-premium-unlocked-1.5.apk
+            --min-sdk-version 21 --max-sdk-version 36 moss-test-no-publish.apk
+          echo "apk sha256:"; sha256sum moss-test-no-publish.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: respiro-premium-unlocked-apk
+          name: moss-test-no-publish-apk
           path: |
-            respiro-premium-unlocked-1.5.apk
+            moss-test-no-publish.apk
             work/patch-report.json
           if-no-files-found: error
