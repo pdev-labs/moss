@@ -1,0 +1,370 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Replace exact strings in a dex while keeping the file valid for ART.
+
+TWO constraints drive this design
+---------------------------------
+1. Android's verifier requires `string_ids` to be sorted by string content
+   (UTF-16 code-unit order).  Changing a string can push it out of order and
+   dexopt then fails with "Out-of-order string_ids: 'A' then 'B'".
+2. A `string_data_item` addressed by `string_ids` may not simply be overwritten
+   when the replacement is longer.
+
+So we rebuild the *string_data region only* (which is a fixed, self-contained
+byte range addressed exclusively by absolute offsets in `string_ids`), then
+re-sort the smallest string_ids window that restores order, then remap every
+reference to the indices that moved.
+
+Because the region is addressed only via `string_ids`, nothing outside it has to
+move, as long as the rebuilt region does not grow.  A single replacement may be
+longer than the original provided the *net* growth across the whole region is
+<= 0 (the region is padded if it shrinks).  `string_ids` entries are permuted in
+place, so the file size never changes.  Header checksum + SHA-1 are recomputed.
+
+Usage:
+  dex_strings_sorted_patch.py in.dex out.dex --map "old=new" [--map ...]
+"""
+
+import argparse
+import hashlib
+import struct
+import sys
+import zlib
+
+
+# ---------------------------------------------------------------- primitives
+
+def u32(d, o):
+    return struct.unpack_from("<I", d, o)[0]
+
+
+def read_uleb128(d, p):
+    n = 0
+    shift = 0
+    plen = 0
+    while True:
+        b = d[p]
+        p += 1
+        plen += 1
+        n |= (b & 0x7F) << shift
+        if not (b & 0x80):
+            break
+        shift += 7
+    return n, plen, p
+
+
+def enc_uleb128(n):
+    out = bytearray()
+    while True:
+        b = n & 0x7F
+        n >>= 7
+        if n:
+            out.append(b | 0x80)
+        else:
+            out.append(b)
+            return bytes(out)
+
+
+def mutf8_units(b):
+    """Decode MUTF-8 payload bytes to their UTF-16 code-unit sequence."""
+    out = []
+    i = 0
+    n = len(b)
+    while i < n:
+        c = b[i]
+        if c & 0x80 == 0:
+            out.append(c)
+            i += 1
+        elif c & 0xE0 == 0xC0:
+            out.append(((c & 0x1F) << 6) | (b[i + 1] & 0x3F))
+            i += 2
+        elif c & 0xF0 == 0xE0:
+            out.append(((c & 0x0F) << 12) |
+                       ((b[i + 1] & 0x3F) << 6) | (b[i + 2] & 0x3F))
+            i += 3
+        else:
+            raise ValueError("bad MUTF-8 byte 0x%02x" % c)
+    return out
+
+
+def sort_key(payload):
+    """dex string ordering: UTF-16 code units, compared lexicographically."""
+    return mutf8_units(payload)
+
+
+def read_string_data(d, off):
+    """Return (payload_bytes, total_item_len) for the string_data_item at off."""
+    n, plen, p = read_uleb128(d, off)
+    start = p
+    units = 0
+    while units < n:
+        b = d[p]
+        if b & 0x80 == 0:
+            p += 1
+            units += 1
+        elif (b & 0xE0) == 0xC0:
+            p += 2
+            units += 1
+        elif (b & 0xF0) == 0xE0:
+            p += 3
+            units += 1
+        else:
+            raise ValueError("bad MUTF-8 byte 0x%02x at 0x%x" % (b, p))
+    return bytes(d[start:p]), plen + (p - start) + 1
+
+
+def fix_header(d):
+    d[12:32] = hashlib.sha1(bytes(d[32:])).digest()
+    struct.pack_into("<I", d, 8, zlib.adler32(bytes(d[12:])) & 0xFFFFFFFF)
+
+
+# ------------------------------------------------- dalvik instruction widths
+
+def build_widths():
+    w = [1] * 256
+    two = [0x02, 0x05, 0x08, 0x13, 0x15, 0x16, 0x19, 0x1A, 0x1C, 0x1F, 0x20,
+           0x22, 0x23, 0x29, 0x2D, 0x2E, 0x2F, 0x30, 0x31, 0x32, 0x33, 0x34,
+           0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0xFE, 0xFF]
+    three = [0x03, 0x06, 0x09, 0x14, 0x17, 0x1B, 0x24, 0x25, 0x26, 0x2A, 0x2B,
+             0x2C, 0x6E, 0x6F, 0x70, 0x71, 0x72, 0x74, 0x75, 0x76, 0x77, 0x78,
+             0xFC, 0xFD]
+    for o in two:
+        w[o] = 2
+    for o in three:
+        w[o] = 3
+    for o in range(0x44, 0x52):     # aget/aput family    23x
+        w[o] = 2
+    for o in range(0x52, 0x60):     # iget/iput family    22c
+        w[o] = 2
+    for o in range(0x60, 0x6E):     # sget/sput family    21c
+        w[o] = 2
+    for o in range(0x90, 0xB0):     # binop               23x
+        w[o] = 2
+    for o in range(0xD0, 0xD8):     # binop/lit16         22s
+        w[o] = 2
+    for o in range(0xD8, 0xE3):     # binop/lit8          22b
+        w[o] = 2
+    w[0x18] = 5                     # const-wide          51l
+    w[0xFA] = 4                     # invoke-polymorphic  45cc
+    w[0xFB] = 4                     # invoke-polymorphic/range 4rcc
+    return w
+
+
+WIDTHS = build_widths()
+
+
+def iter_code_items(d):
+    """Yield (insns_off, insns_size) for every code_item in the dex."""
+    cd_size = u32(d, 0x60)
+    cd_off = u32(d, 0x64)
+    seen = set()
+    for i in range(cd_size):
+        base = cd_off + 32 * i
+        class_data_off = u32(d, base + 24)
+        if class_data_off == 0 or class_data_off in seen:
+            continue
+        seen.add(class_data_off)
+        p = class_data_off
+        sf, _, p = read_uleb128(d, p)
+        inf, _, p = read_uleb128(d, p)
+        dm, _, p = read_uleb128(d, p)
+        vm, _, p = read_uleb128(d, p)
+        for _ in range(sf + inf):
+            _, _, p = read_uleb128(d, p)
+            _, _, p = read_uleb128(d, p)
+        for count in (dm, vm):
+            for _ in range(count):
+                _, _, p = read_uleb128(d, p)     # method_idx_diff
+                _, _, p = read_uleb128(d, p)     # access_flags
+                code_off, _, p = read_uleb128(d, p)
+                if code_off:
+                    yield code_off + 16, u32(d, code_off + 12)
+
+
+def remap_const_strings(d, perm):
+    """Rewrite `const-string`/`const-string/jumbo` operands using perm[]."""
+    touched = 0
+    for insns_off, insns_size in iter_code_items(d):
+        i = 0
+        while i < insns_size:
+            unit = struct.unpack_from("<H", d, insns_off + 2 * i)[0]
+            op = unit & 0xFF
+            if unit == 0x0100:                       # packed-switch payload
+                size = struct.unpack_from("<H", d, insns_off + 2 * (i + 1))[0]
+                i += 4 + size * 2
+                continue
+            if unit == 0x0200:                       # sparse-switch payload
+                size = struct.unpack_from("<H", d, insns_off + 2 * (i + 1))[0]
+                i += 2 + size * 4
+                continue
+            if unit == 0x0300:                       # fill-array-data payload
+                ew = struct.unpack_from("<H", d, insns_off + 2 * (i + 1))[0]
+                sz = u32(d, insns_off + 2 * (i + 2))
+                i += 4 + (sz * ew + 1) // 2
+                continue
+            if op == 0x1A:                           # const-string      21c
+                idx = struct.unpack_from("<H", d, insns_off + 2 * (i + 1))[0]
+                if idx in perm:
+                    struct.pack_into("<H", d, insns_off + 2 * (i + 1), perm[idx])
+                    touched += 1
+            elif op == 0x1B:                         # const-string/jumbo 31c
+                idx = u32(d, insns_off + 2 * (i + 1))
+                if idx in perm:
+                    struct.pack_into("<I", d, insns_off + 2 * (i + 1), perm[idx])
+                    touched += 1
+            i += WIDTHS[op]
+    return touched
+
+
+def remap_id_tables(d, perm):
+    """Remap non-code string index references (defensive; normally no-ops)."""
+    touched = 0
+
+    def fix(off):
+        nonlocal touched
+        idx = u32(d, off)
+        if idx in perm:
+            struct.pack_into("<I", d, off, perm[idx])
+            touched += 1
+
+    for size_off, off_off, stride, field in ((64, 68, 4, 0),     # type_ids.descriptor
+                                             (72, 76, 12, 0),    # proto_ids.shorty
+                                             (80, 84, 8, 4),     # field_ids.name
+                                             (88, 92, 8, 4)):    # method_ids.name
+        size = u32(d, size_off)
+        off = u32(d, off_off)
+        for i in range(size):
+            fix(off + stride * i + field)
+    cd_size = u32(d, 0x60)
+    cd_off = u32(d, 0x64)
+    for i in range(cd_size):                                     # class_defs.source_file
+        sf = u32(d, cd_off + 32 * i + 16)
+        if sf != 0xFFFFFFFF:
+            fix(cd_off + 32 * i + 16)
+    return touched
+
+
+# ------------------------------------------------------------------ the patch
+
+def patch(d, mapping):
+    ssize = u32(d, 56)               # string_ids_size
+    soff = u32(d, 60)                # string_ids_off
+
+    offs = [u32(d, soff + 4 * i) for i in range(ssize)]
+    unique = sorted(set(offs))
+    items = {o: read_string_data(d, o) for o in unique}
+
+    region_start = unique[0]
+    region_end = max(o + items[o][1] for o in unique)
+    region_len = region_end - region_start
+
+    mapping_b = {k.encode("utf-8"): v.encode("utf-8") for k, v in mapping.items()}
+
+    # 1) rebuild the whole string_data region from its start, densely.
+    final = {}
+    blob = bytearray()
+    new_off = {}
+    for o in unique:
+        payload = items[o][0]
+        nb = mapping_b.get(payload)
+        if nb is None:
+            item = bytes(d[o:o + items[o][1]])
+            final[o] = payload
+        else:
+            item = enc_uleb128(len(mutf8_units(nb))) + nb + b"\x00"
+            final[o] = nb
+        new_off[o] = region_start + len(blob)
+        blob += item
+
+    if len(blob) > region_len:
+        raise SystemExit("string_data region would grow by %d bytes; refusing"
+                         % (len(blob) - region_len))
+    d[region_start:region_start + len(blob)] = blob
+    if len(blob) < region_len:
+        d[region_start + len(blob):region_end] = b"\x00" * (region_len - len(blob))
+
+    off_for_content = {}
+    for o in unique:
+        off_for_content.setdefault(final[o], new_off[o])
+
+    before = [items[o][0] for o in offs]
+    after = [final[o] for o in offs]
+    changed = [i for i in range(ssize) if before[i] != after[i]]
+    if not changed:
+        return 0, 0, None
+
+    # 2) grow a window that makes the array sorted once its members are ordered
+    n = ssize
+    lo, hi = min(changed), max(changed)
+    guard = 0
+    while True:
+        guard += 1
+        if guard > 4096:
+            raise SystemExit("window expansion runaway")
+        sub = sorted(after[lo:hi + 1], key=sort_key)
+        ok_hi = (hi + 1 >= n) or (sort_key(sub[-1]) <= sort_key(after[hi + 1]))
+        ok_lo = (lo - 1 < 0) or (sort_key(sub[0]) >= sort_key(after[lo - 1]))
+        if ok_hi and ok_lo:
+            break
+        if not ok_hi:
+            hi += 1
+        if not ok_lo:
+            lo -= 1
+
+    sub_sorted = sorted(after[lo:hi + 1], key=sort_key)
+
+    # 3) rewrite the window of string_ids and derive old-index -> new-index
+    perm = {}
+    for k, content in enumerate(sub_sorted):
+        struct.pack_into("<I", d, soff + 4 * (lo + k), off_for_content[content])
+        for i in range(lo, hi + 1):
+            if i not in perm and after[i] == content:
+                perm[i] = lo + k
+                break
+
+    # 4) remap every reference to a moved index
+    code_hits = remap_const_strings(d, perm)
+    id_hits = remap_id_tables(d, perm)
+
+    fix_header(d)
+    return len(changed), code_hits, (lo, hi, len(perm), id_hits)
+
+
+def main(argv):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("dex")
+    ap.add_argument("out")
+    ap.add_argument("--map", action="append", default=[])
+    args = ap.parse_args(argv[1:])
+
+    d = bytearray(open(args.dex, "rb").read())
+    if d[:4] != b"dex\n":
+        raise SystemExit("not a dex: %s" % args.dex)
+
+    mapping = {}
+    for m in args.map:
+        if "=" not in m:
+            raise SystemExit("--map needs old=new, got %r" % m)
+        k, v = m.split("=", 1)
+        mapping[k] = v
+    if not mapping:
+        raise SystemExit("no --map given")
+
+    changed, code_hits, info = patch(d, mapping)
+    open(args.out, "wb").write(bytes(d))
+    if not changed:
+        print("no strings changed")
+        return 0
+    lo, hi, nmoved, id_hits = info
+    print("strings replaced: %d" % changed)
+    print("string_ids window re-sorted: [%d..%d] (%d entries)" % (lo, hi, nmoved))
+    print("const-string operands remapped: %d   id-table refs remapped: %d"
+          % (code_hits, id_hits))
+    if id_hits:
+        raise SystemExit("unexpected non-code reference to a moved string; aborting")
+    print("wrote %s" % args.out)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
