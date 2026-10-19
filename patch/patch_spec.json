@@ -7,7 +7,7 @@
       "method": "g",
       "match": {"kind": "if-testz", "bytes": "380d0600", "ordinal": 0},
       "expect_next": {"kind": "invoke", "target_class": "Ljava/lang/Boolean;", "target_method": "booleanValue"},
-      "replace": {"kind": "bytes", "bytes": "12310000"}
+      "replace": {"kind": "bytes", "bytes": "12130000"}
     },
     {
       "name": "widgets_unlocked_del_nullcheck",
@@ -32,7 +32,7 @@
       "method": "g",
       "match": {"kind": "if-testz", "bytes": "380d0600", "ordinal": 1},
       "expect_next": {"kind": "invoke", "target_class": "Ljava/lang/Boolean;", "target_method": "booleanValue"},
-      "replace": {"kind": "bytes", "bytes": "12310000"}
+      "replace": {"kind": "bytes", "bytes": "12130000"}
     },
     {
       "name": "premium_unlocked_del_nullcheck",
@@ -57,7 +57,7 @@
       "method": "a",
       "desc": "()Ljava/lang/Object;",
       "match": {"kind": "move-result", "bytes": "0a00"},
-      "replace": {"kind": "bytes", "bytes": "1201"}
+      "replace": {"kind": "bytes", "bytes": "1210"}
     },
     {
       "name": "sigcheck_compute_path_true",
@@ -66,7 +66,7 @@
       "method": "a",
       "desc": "()Ljava/lang/Object;",
       "match": {"bytes": "0110"},
-      "replace": {"kind": "bytes", "bytes": "1201"}
+      "replace": {"kind": "bytes", "bytes": "1210"}
     }
   ]
 }
