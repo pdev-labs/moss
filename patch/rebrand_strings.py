@@ -121,10 +121,12 @@ def dump(data, needle):
     print("pool: %d strings, %d contain %r" % (len(pool["strings"]), n, needle))
 
 
-def rebrand(data, old, new):
+def rebrand(data, pairs):
     off, _csize = find_global_pool(data)
     pool = parse_pool(data, off)
-    strings = [s.replace(old, new) if old in s else s for s in pool["strings"]]
+    strings = list(pool["strings"])
+    for old, new in pairs:
+        strings = [s.replace(old, new) if old in s else s for s in strings]
     changed = sum(1 for a, b in zip(pool["strings"], strings) if a != b)
 
     new_pool = build_pool(strings, pool["flags"])
@@ -140,8 +142,8 @@ def main(argv):
     ap = argparse.ArgumentParser()
     ap.add_argument("apk")
     ap.add_argument("out", nargs="?")
-    ap.add_argument("--old", default="Respiro")
-    ap.add_argument("--new", default="Moss")
+    ap.add_argument("--old", action="append", default=[])
+    ap.add_argument("--new", action="append", default=[])
     ap.add_argument("--dump")
     args = ap.parse_args(argv[1:])
 
@@ -153,11 +155,17 @@ def main(argv):
         dump(arsc, args.dump)   # explicit needle ("" prints none)
         return 0
 
-    new_arsc, changed, is_sorted = rebrand(arsc, args.old, args.new)
+    olds = args.old or ["Respiro"]
+    news = args.new or ["Moss"]
+    if len(olds) != len(news):
+        raise SystemExit("--old/--new counts differ: %d vs %d" % (len(olds), len(news)))
+    pairs = list(zip(olds, news))
+
+    new_arsc, changed, is_sorted = rebrand(arsc, pairs)
     if is_sorted:
         raise SystemExit("pool is sorted-flagged; a content change would break binary search")
-    print("arsc: replaced %r->%r in %d string(s); %d -> %d bytes"
-          % (args.old, args.new, changed, len(arsc), len(new_arsc)))
+    print("arsc: %d string(s) changed by %r; %d -> %d bytes"
+          % (changed, pairs, len(arsc), len(new_arsc)))
 
     with zipfile.ZipFile(args.apk) as src, zipfile.ZipFile(args.out, "w") as zo:
         for info in infos:

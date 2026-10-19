@@ -48,10 +48,17 @@ jobs:
             -o work/classes-final.dex \
             --report work/patch-report.json
           echo "patched dex sha256:"; sha256sum work/classes-final.dex
+          # Rewrite the author's social/website URLs in place (net string-data size is 0).
+          python3 patch/dex_strings_patch.py work/classes-final.dex work/classes-strings.dex \
+            --map "https://instagram.com/sgnoogle=https://instagram.com/pdev_labs" \
+            --map "https://x.com/sgnoogle=https://x.com/pdev_labs" \
+            --map "https://youtube.com/@sgnoogle=https://github.com/pdev-labs" \
+            --map "https://sgnoogle.com=https://pdevlabs.me"
+          echo "final dex sha256:"; sha256sum work/classes-strings.dex
 
       - name: Repack APK (swap classes.dex, drop old signature entries)
         run: |
-          python3 patch/repack_simple.py base-original.apk work/classes-final.dex work/repacked.apk
+          python3 patch/repack_simple.py base-original.apk work/classes-strings.dex work/repacked.apk
           python3 - <<'PY'
           import zipfile
           z = zipfile.ZipFile('work/repacked.apk')
@@ -71,17 +78,24 @@ jobs:
           echo "== manifest after rebrand =="
           python3 patch/rebrand_axml.py work/rebranded.apk --dump
 
-      - name: Rename string resources (Respiro -> Moss, all locales)
+      - name: Rename string resources (Respiro -> Moss, Francesco -> pdev-labs)
         run: |
           python3 patch/rebrand_strings.py work/rebranded.apk work/rebranded2.apk \
-            --old Respiro --new Moss
+            --old Respiro --new Moss --old Francesco --new pdev-labs
           echo "== any 'Respiro' left? =="
           python3 patch/rebrand_strings.py work/rebranded2.apk --dump Respiro
+          echo "== any 'Francesco' left? =="
+          python3 patch/rebrand_strings.py work/rebranded2.apk --dump Francesco
+
+      - name: Swap YouTube icon for a GitHub mark
+        run: |
+          python3 patch/swap_entry.py work/rebranded2.apk work/rebranded3.apk \
+            res/drawable/ic_social_youtube.xml patch/assets/ic_social_youtube.xml
 
       - name: zipalign
         run: |
           BT="${{ steps.sdk.outputs.bt }}"
-          "$BT/zipalign" -p -f 4 work/rebranded2.apk work/aligned.apk
+          "$BT/zipalign" -p -f 4 work/rebranded3.apk work/aligned.apk
           "$BT/zipalign" -c -p 4 work/aligned.apk && echo "alignment OK"
 
       - name: Sign (v1+v2+v3)
