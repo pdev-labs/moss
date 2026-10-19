@@ -67,6 +67,15 @@
       "desc": "()Ljava/lang/Object;",
       "match": {"bytes": "0110"},
       "replace": {"kind": "bytes", "bytes": "1210"}
+    },
+    {
+      "name": "remove_modyolo_toast_call",
+      "reason": "The Modyolo re-sign injected a Toast('modyolo.com') ad at the very top of MainActivity.onCreate. Nop out the invoke to that injected method so the ad never shows. Equal length (6 bytes); the death method body and its string remain in the pool but are never reached.",
+      "class": "Lcom/sgnoogle/respiro/MainActivity;",
+      "method": "onCreate",
+      "desc": "(Landroid/os/Bundle;)V",
+      "match": {"kind": "invoke", "target_class": "Lcom/sgnoogle/respiro/MainActivity;", "target_method": "_showModYoloToast"},
+      "replace": {"kind": "nops"}
     }
   ]
 }
