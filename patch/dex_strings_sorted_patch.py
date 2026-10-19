@@ -293,41 +293,24 @@ def patch(d, mapping):
     if not changed:
         return 0, 0, None
 
-    # 2) grow a window that makes the array sorted once its members are ordered
-    n = ssize
-    lo, hi = min(changed), max(changed)
-    guard = 0
-    while True:
-        guard += 1
-        if guard > 4096:
-            raise SystemExit("window expansion runaway")
-        sub = sorted(after[lo:hi + 1], key=sort_key)
-        ok_hi = (hi + 1 >= n) or (sort_key(sub[-1]) <= sort_key(after[hi + 1]))
-        ok_lo = (lo - 1 < 0) or (sort_key(sub[0]) >= sort_key(after[lo - 1]))
-        if ok_hi and ok_lo:
-            break
-        if not ok_hi:
-            hi += 1
-        if not ok_lo:
-            lo -= 1
+    # 2) the pool was sorted before the edit and this key reproduces that order
+    #    exactly, so a full re-sort is the minimal correct repair and yields the
+    #    precise set of indices that move.
+    order = sorted(range(ssize), key=lambda i: (sort_key(after[i]), i))
 
-    sub_sorted = sorted(after[lo:hi + 1], key=sort_key)
-
-    # 3) rewrite the window of string_ids and derive old-index -> new-index
+    # 3) rewrite string_ids in sorted order, collecting the indices that moved
     perm = {}
-    for k, content in enumerate(sub_sorted):
-        struct.pack_into("<I", d, soff + 4 * (lo + k), off_for_content[content])
-        for i in range(lo, hi + 1):
-            if i not in perm and after[i] == content:
-                perm[i] = lo + k
-                break
+    for pos, i in enumerate(order):
+        struct.pack_into("<I", d, soff + 4 * pos, off_for_content[after[i]])
+        if pos != i:
+            perm[i] = pos
 
     # 4) remap every reference to a moved index
     code_hits = remap_const_strings(d, perm)
     id_hits = remap_id_tables(d, perm)
 
     fix_header(d)
-    return len(changed), code_hits, (lo, hi, len(perm), id_hits)
+    return len(changed), code_hits, (ssize, len(perm), id_hits)
 
 
 def main(argv):
@@ -355,9 +338,9 @@ def main(argv):
     if not changed:
         print("no strings changed")
         return 0
-    lo, hi, nmoved, id_hits = info
+    total, nmoved, id_hits = info
     print("strings replaced: %d" % changed)
-    print("string_ids window re-sorted: [%d..%d] (%d entries)" % (lo, hi, nmoved))
+    print("string_ids entries re-ordered: %d of %d" % (nmoved, total))
     print("const-string operands remapped: %d   id-table refs remapped: %d"
           % (code_hits, id_hits))
     if id_hits:

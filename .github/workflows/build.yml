@@ -56,7 +56,9 @@ jobs:
             --map "https://instagram.com/sgnoogle=https://instagram.com/pdev_labs" \
             --map "https://x.com/sgnoogle=https://x.com/pdev_labs" \
             --map "https://youtube.com/@sgnoogle=https://github.com/pdev-labs" \
-            --map "https://sgnoogle.com=https://pdevlabs.me"
+            --map "https://sgnoogle.com=https://pdevlabs.me" \
+            --map "RespiroLauncher/1.5 francesco.sgnaolin+respiro@gmail.com=RespiroLauncher/1.5 pdev.labs+moss@gmail.com" \
+            --map "mailto:francesco.sgnaolin+respiro@gmail.com=mailto:pdev.labs+moss@gmail.com"
           echo "final dex sha256:"; sha256sum work/classes-strings.dex
           python3 patch/dex_check_strings_sorted.py work/classes-strings.dex
 

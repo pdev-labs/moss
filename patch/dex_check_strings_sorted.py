@@ -39,11 +39,15 @@ def mutf8_units(b):
 WANT = ["https://instagram.com/pdev_labs",
         "https://x.com/pdev_labs",
         "https://github.com/pdev-labs",
-        "https://pdevlabs.me"]
+        "https://pdevlabs.me",
+        "RespiroLauncher/1.5 pdev.labs+moss@gmail.com",
+        "mailto:pdev.labs+moss@gmail.com"]
 GONE = ["https://instagram.com/sgnoogle",
         "https://x.com/sgnoogle",
         "https://youtube.com/@sgnoogle",
-        "https://sgnoogle.com"]
+        "https://sgnoogle.com",
+        "RespiroLauncher/1.5 francesco.sgnaolin+respiro@gmail.com",
+        "mailto:francesco.sgnaolin+respiro@gmail.com"]
 
 
 def main(path):
