@@ -94,6 +94,13 @@ def build_pool(strings, flags):
     stc = 0
     strings_start = 28 + 4 * sc + 4 * stc
     size = strings_start + len(data)
+    # A resource table must be 4-byte aligned: libandroidfw rejects an arsc whose
+    # chunk/total size is not a multiple of 4 ("not on an integer boundary").
+    # Pad the tail of the string data (no offset ever points into it).
+    pad = (-size) % 4
+    if pad:
+        data += b"\x00" * pad
+        size += pad
     out = bytearray()
     out += struct.pack("<HHI", CHUNK_STRING_POOL, 28, size)
     out += struct.pack("<IIIII", sc, stc, flags, strings_start, 0)
