@@ -76,6 +76,15 @@
       "desc": "(Landroid/os/Bundle;)V",
       "match": {"kind": "invoke", "target_class": "Lcom/sgnoogle/respiro/MainActivity;", "target_method": "_showModYoloToast"},
       "replace": {"kind": "nops"}
+    },
+    {
+      "name": "remove_premium_tile",
+      "reason": "s6/hj.K draws the 'You're a premium user' settings tile. Return immediately so the tile is never drawn (equal-length: first move/from16 is 4 bytes -> return-void + 2 nops).",
+      "class": "Ls6/hj;",
+      "method": "K",
+      "desc": "(IZLs1/c;FFFFFFFLk7/a;Lk7/a;Lk7/l;Lk7/l;Lk7/a;Ljava/lang/String;Lp6/c;Lk7/a;Lk7/a;ZLa1/u;I)V",
+      "match": {"kind": "move/from16", "ordinal": 0},
+      "replace": {"kind": "bytes", "bytes": "0e000000"}
     }
   ]
 }

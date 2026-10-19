@@ -71,10 +71,17 @@ jobs:
           echo "== manifest after rebrand =="
           python3 patch/rebrand_axml.py work/rebranded.apk --dump
 
+      - name: Rename string resources (Respiro -> Moss, all locales)
+        run: |
+          python3 patch/rebrand_strings.py work/rebranded.apk work/rebranded2.apk \
+            --old Respiro --new Moss
+          echo "== any 'Respiro' left? =="
+          python3 patch/rebrand_strings.py work/rebranded2.apk --dump Respiro
+
       - name: zipalign
         run: |
           BT="${{ steps.sdk.outputs.bt }}"
-          "$BT/zipalign" -p -f 4 work/rebranded.apk work/aligned.apk
+          "$BT/zipalign" -p -f 4 work/rebranded2.apk work/aligned.apk
           "$BT/zipalign" -c -p 4 work/aligned.apk && echo "alignment OK"
 
       - name: Sign (v1+v2+v3)
