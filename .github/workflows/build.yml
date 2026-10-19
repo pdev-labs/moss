@@ -54,13 +54,13 @@ jobs:
           python3 patch/repack.py \
             --apk base-original.apk \
             --dex classes.dex=work/classes-final.dex \
-            --out work/unsigned.apk \
+            --out work/repacked.apk \
             --no-sign
 
       - name: zipalign
         run: |
           BT="${{ steps.sdk.outputs.bt }}"
-          "$BT/zipalign" -p -f 4 work/unsigned.apk work/aligned.apk
+          "$BT/zipalign" -p -f 4 work/repacked.apk work/aligned.apk
           "$BT/zipalign" -c -p 4 work/aligned.apk && echo "alignment OK"
 
       - name: Sign (v1+v2+v3)
