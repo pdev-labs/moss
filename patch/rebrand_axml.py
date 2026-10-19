@@ -153,7 +153,7 @@ def dump(data):
                 print("  <%s %s=%s>" % (el, aname, describe(strings, dtype, ddata)))
 
 
-def rebrand(data, new_package, new_label):
+def rebrand(data, old_package, new_package, new_label):
     if u16(data, 0) != 0x0003:
         raise SystemExit("not an AXML file (bad magic)")
     fsize = u32(data, 4)
@@ -161,10 +161,22 @@ def rebrand(data, new_package, new_label):
     strings = list(pool["strings"])
     content_start = pool["off"] + pool["size"]
 
-    pkg_hits = first_index(strings, "com.sgnoogle.respiro")
+    pkg_hits = first_index(strings, old_package)
     if len(pkg_hits) != 1:
-        raise SystemExit("package string not found or ambiguous: %r" % pkg_hits)
+        raise SystemExit("package string %r not found or ambiguous: %r"
+                         % (old_package, pkg_hits))
     pkg_idx = pkg_hits[0]
+
+    # Strings that are derived from the package id and must follow it, BUT which
+    # are not Java class names (class names must keep matching the dex). The
+    # provider authority in particular MUST be unique or INSTALL fails with
+    # INSTALL_FAILED_CONFLICTING_PROVIDER when the old app is also present.
+    derived = {}
+    for suffix in (".androidx-startup",
+                   ".DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"):
+        old = old_package + suffix
+        if old in strings:
+            derived[strings.index(old)] = new_package + suffix
 
     label_name = first_index(strings, "label")
     if not label_name:
@@ -190,20 +202,24 @@ def rebrand(data, new_package, new_label):
     label_idx = len(strings)
     strings.append(new_label)
     strings[pkg_idx] = new_package
+    for idx, val in derived.items():
+        strings[idx] = val
 
     new_pool = build_pool(strings, pool["flags"])
-    shift = len(new_pool) - pool["size"]
     rest = bytearray(data[content_start:])
 
     changed = 0
     for a, dtype, ddata in label_sites:
         if dtype == TYPE_REFERENCE and ddata == app_label_ref:
-            rel = a + shift - content_start
-            struct.pack_into("<I", rest, rel, label_idx)
-            struct.pack_into("<H", rest, rel + 12, RES_VALUE_SIZE)
-            rest[rel + 14] = 0
-            rest[rel + 15] = TYPE_STRING
-            struct.pack_into("<I", rest, rel + 16, label_idx)
+            # `a` is an absolute offset in the original file; its position inside
+            # `rest` (which is data[content_start:]) does not depend on the new
+            # pool size.
+            rel = a - content_start
+            struct.pack_into("<I", rest, rel + 8, label_idx)       # rawValue
+            struct.pack_into("<H", rest, rel + 12, RES_VALUE_SIZE)  # typedValue.size
+            rest[rel + 14] = 0                                     # res0
+            rest[rel + 15] = TYPE_STRING                           # dataType
+            struct.pack_into("<I", rest, rel + 16, label_idx)      # data
             changed += 1
     if changed == 0:
         raise SystemExit("no label attribute referenced the application label")
@@ -220,6 +236,7 @@ def main(argv):
     ap = argparse.ArgumentParser()
     ap.add_argument("apk")
     ap.add_argument("out", nargs="?")
+    ap.add_argument("--old-package", default="com.sgnoogle.respiro")
     ap.add_argument("--package")
     ap.add_argument("--label")
     ap.add_argument("--dump", action="store_true")
@@ -237,7 +254,7 @@ def main(argv):
         print("error: need --package, --label and an output apk (or --dump)")
         return 2
 
-    newax, changed = rebrand(ax, args.package, args.label)
+    newax, changed = rebrand(ax, args.old_package, args.package, args.label)
     print("rebrand: package -> %s, label -> %s (%d label site(s)); manifest %d -> %d bytes"
           % (args.package, args.label, changed, len(ax), len(newax)))
 
