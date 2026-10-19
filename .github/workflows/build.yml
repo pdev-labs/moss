@@ -1,4 +1,4 @@
-name: Build Respiro premium-unlock APK
+name: Build Moss stable APK
 
 on:
   push:
@@ -130,16 +130,16 @@ jobs:
             --key-pass pass:respiro123 \
             --ks-key-alias respiro \
             --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
-            --out moss-test-no-publish.apk work/aligned.apk
+            --out moss-stable.apk work/aligned.apk
           "$BT/apksigner" verify --print-certs --verbose \
-            --min-sdk-version 21 --max-sdk-version 36 moss-test-no-publish.apk
-          echo "apk sha256:"; sha256sum moss-test-no-publish.apk
+            --min-sdk-version 26 --max-sdk-version 36 moss-stable.apk
+          echo "apk sha256:"; sha256sum moss-stable.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: moss-test-no-publish-apk
+          name: moss-stable-apk
           path: |
-            moss-test-no-publish.apk
+            moss-stable.apk
             work/patch-report.json
           if-no-files-found: error
