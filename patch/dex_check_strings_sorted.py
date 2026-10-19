@@ -45,7 +45,8 @@ WANT = ["https://instagram.com/pdev_labs",
         "MossLauncher",
         "Moss",
         "moss_boot",
-        "moss_premium"]
+        "moss_premium",
+        "https://github.com/pdev-labs/moss/issues/new"]
 GONE = ["https://instagram.com/sgnoogle",
         "https://x.com/sgnoogle",
         "https://youtube.com/@sgnoogle",
@@ -55,7 +56,9 @@ GONE = ["https://instagram.com/sgnoogle",
         "Respiro",
         "RespiroLauncher",
         "respiro_boot",
-        "respiro_premium"]
+        "respiro_premium",
+        "https://play.google.com/store/apps/details?id=",
+        "market://details?id="]
 
 
 def main(path):

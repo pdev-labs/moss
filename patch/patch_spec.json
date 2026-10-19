@@ -5,50 +5,100 @@
       "reason": "q6/h1.g case for c2.r (widgets_unlocked): drop the null branch and set the result register to 1, so Boolean.valueOf(v3) is always TRUE regardless of stored value.",
       "class": "Lq6/h1;",
       "method": "g",
-      "match": {"kind": "if-testz", "bytes": "380d0600", "ordinal": 0},
-      "expect_next": {"kind": "invoke", "target_class": "Ljava/lang/Boolean;", "target_method": "booleanValue"},
-      "replace": {"kind": "bytes", "bytes": "12130000"}
+      "match": {
+        "kind": "if-testz",
+        "bytes": "380d0600",
+        "ordinal": 0
+      },
+      "expect_next": {
+        "kind": "invoke",
+        "target_class": "Ljava/lang/Boolean;",
+        "target_method": "booleanValue"
+      },
+      "replace": {
+        "kind": "bytes",
+        "bytes": "12130000"
+      }
     },
     {
       "name": "widgets_unlocked_del_nullcheck",
       "reason": "the removed branch no longer guards this call; nop it so a (possibly null) Boolean is never dereferenced.",
       "class": "Lq6/h1;",
       "method": "g",
-      "match": {"kind": "invoke", "bytes": "6e104b2d0d00", "ordinal": 0},
-      "replace": {"kind": "bytes", "bytes": "000000000000"}
+      "match": {
+        "kind": "invoke",
+        "bytes": "6e104b2d0d00",
+        "ordinal": 0
+      },
+      "replace": {
+        "kind": "bytes",
+        "bytes": "000000000000"
+      }
     },
     {
       "name": "widgets_unlocked_del_moveresult",
       "reason": "its producing invoke was nop'd; a move-result must follow an invoke or the class fails to verify.",
       "class": "Lq6/h1;",
       "method": "g",
-      "match": {"kind": "move-result", "bytes": "0a03", "ordinal": 0},
-      "replace": {"kind": "bytes", "bytes": "0000"}
+      "match": {
+        "kind": "move-result",
+        "bytes": "0a03",
+        "ordinal": 0
+      },
+      "replace": {
+        "kind": "bytes",
+        "bytes": "0000"
+      }
     },
     {
       "name": "premium_unlocked_force_true",
       "reason": "q6/h1.g case for c2.p (premium_unlocked): drop the null branch and set the result register to 1.",
       "class": "Lq6/h1;",
       "method": "g",
-      "match": {"kind": "if-testz", "bytes": "380d0600", "ordinal": 1},
-      "expect_next": {"kind": "invoke", "target_class": "Ljava/lang/Boolean;", "target_method": "booleanValue"},
-      "replace": {"kind": "bytes", "bytes": "12130000"}
+      "match": {
+        "kind": "if-testz",
+        "bytes": "380d0600",
+        "ordinal": 1
+      },
+      "expect_next": {
+        "kind": "invoke",
+        "target_class": "Ljava/lang/Boolean;",
+        "target_method": "booleanValue"
+      },
+      "replace": {
+        "kind": "bytes",
+        "bytes": "12130000"
+      }
     },
     {
       "name": "premium_unlocked_del_nullcheck",
       "reason": "the removed branch no longer guards this call; nop it.",
       "class": "Lq6/h1;",
       "method": "g",
-      "match": {"kind": "invoke", "bytes": "6e104b2d0d00", "ordinal": 1},
-      "replace": {"kind": "bytes", "bytes": "000000000000"}
+      "match": {
+        "kind": "invoke",
+        "bytes": "6e104b2d0d00",
+        "ordinal": 1
+      },
+      "replace": {
+        "kind": "bytes",
+        "bytes": "000000000000"
+      }
     },
     {
       "name": "premium_unlocked_del_moveresult",
       "reason": "its producing invoke was nop'd; a move-result must follow an invoke.",
       "class": "Lq6/h1;",
       "method": "g",
-      "match": {"kind": "move-result", "bytes": "0a03", "ordinal": 1},
-      "replace": {"kind": "bytes", "bytes": "0000"}
+      "match": {
+        "kind": "move-result",
+        "bytes": "0a03",
+        "ordinal": 1
+      },
+      "replace": {
+        "kind": "bytes",
+        "bytes": "0000"
+      }
     },
     {
       "name": "sigcheck_cached_path_true",
@@ -56,8 +106,14 @@
       "class": "Ls6/h3;",
       "method": "a",
       "desc": "()Ljava/lang/Object;",
-      "match": {"kind": "move-result", "bytes": "0a00"},
-      "replace": {"kind": "bytes", "bytes": "1210"}
+      "match": {
+        "kind": "move-result",
+        "bytes": "0a00"
+      },
+      "replace": {
+        "kind": "bytes",
+        "bytes": "1210"
+      }
     },
     {
       "name": "sigcheck_compute_path_true",
@@ -65,8 +121,13 @@
       "class": "Ls6/h3;",
       "method": "a",
       "desc": "()Ljava/lang/Object;",
-      "match": {"bytes": "0110"},
-      "replace": {"kind": "bytes", "bytes": "1210"}
+      "match": {
+        "bytes": "0110"
+      },
+      "replace": {
+        "kind": "bytes",
+        "bytes": "1210"
+      }
     },
     {
       "name": "remove_modyolo_toast_call",
@@ -74,8 +135,14 @@
       "class": "Lcom/sgnoogle/respiro/MainActivity;",
       "method": "onCreate",
       "desc": "(Landroid/os/Bundle;)V",
-      "match": {"kind": "invoke", "target_class": "Lcom/sgnoogle/respiro/MainActivity;", "target_method": "_showModYoloToast"},
-      "replace": {"kind": "nops"}
+      "match": {
+        "kind": "invoke",
+        "target_class": "Lcom/sgnoogle/respiro/MainActivity;",
+        "target_method": "_showModYoloToast"
+      },
+      "replace": {
+        "kind": "nops"
+      }
     },
     {
       "name": "remove_premium_tile",
@@ -83,8 +150,44 @@
       "class": "Ls6/hj;",
       "method": "K",
       "desc": "(IZLs1/c;FFFFFFFLk7/a;Lk7/a;Lk7/l;Lk7/l;Lk7/a;Ljava/lang/String;Lp6/c;Lk7/a;Lk7/a;ZLa1/u;I)V",
-      "match": {"kind": "move/from16", "ordinal": 0},
-      "replace": {"kind": "bytes", "bytes": "0e000000"}
+      "match": {
+        "kind": "move/from16",
+        "ordinal": 0
+      },
+      "replace": {
+        "kind": "bytes",
+        "bytes": "0e000000"
+      }
+    },
+    {
+      "name": "review_no_pkg_append_1",
+      "reason": "Leave a review now opens a fixed GitHub issue URL; drop the StringBuilder.append(packageName) so the URL is exact (browser branch).",
+      "class": "Ls6/hj;",
+      "method": "A0",
+      "desc": "(Landroid/content/Context;)V",
+      "match": {
+        "kind": "invoke",
+        "bytes": "6e206c2e1300",
+        "ordinal": 0
+      },
+      "replace": {
+        "kind": "nops"
+      }
+    },
+    {
+      "name": "review_no_pkg_append_2",
+      "reason": "same for the fallback branch (reached only when no browser is available).",
+      "class": "Ls6/hj;",
+      "method": "A0",
+      "desc": "(Landroid/content/Context;)V",
+      "match": {
+        "kind": "invoke",
+        "bytes": "6e206c2e1300",
+        "ordinal": 1
+      },
+      "replace": {
+        "kind": "nops"
+      }
     }
   ]
 }

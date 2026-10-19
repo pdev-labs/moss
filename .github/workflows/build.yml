@@ -63,6 +63,8 @@ jobs:
             --map "RespiroLauncher=MossLauncher" \
             --map "respiro_boot=moss_boot" \
             --map "respiro_premium=moss_premium" \
+            --map "https://play.google.com/store/apps/details?id==>https://github.com/pdev-labs/moss/issues/new" \
+            --map "market://details?id==>https://github.com/pdev-labs/moss/issues/new" \
             --allow-id-refs
           echo "renamed dex sha256:"; sha256sum work/classes-strings.dex
           # The Privacy/Terms footer is `Text(privacy) Text("·") Text(terms)`; its label

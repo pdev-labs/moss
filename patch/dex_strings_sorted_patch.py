@@ -451,9 +451,14 @@ def main(argv):
 
     mapping = {}
     for m in args.map:
-        if "=" not in m:
+        # `old=new`; use `old=>new` when either side contains '=' (e.g. a URL
+        # that ends in "?id=").
+        if "=>" in m:
+            k, v = m.split("=>", 1)
+        elif "=" in m:
+            k, v = m.split("=", 1)
+        else:
             raise SystemExit("--map needs old=new, got %r" % m)
-        k, v = m.split("=", 1)
         mapping[k] = v
     if not mapping:
         raise SystemExit("no --map given")
