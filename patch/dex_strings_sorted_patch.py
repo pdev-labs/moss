@@ -420,6 +420,17 @@ def patch(d, mapping):
     #    precise set of indices that move.
     order = sorted(range(ssize), key=lambda i: (sort_key(after[i]), i))
 
+    # ART requires *strictly* increasing string_ids, so two entries may never end
+    # up with the same content (e.g. mapping two different strings onto one URL).
+    # The pool addresses a string_data_item by offset and duplicates would collapse
+    # to a single item, so catch it here rather than shipping an unloadable dex.
+    for pos in range(1, ssize):
+        if after[order[pos]] == after[order[pos - 1]]:
+            raise SystemExit("replacement would duplicate the string %r at ids "
+                             "%d and %d; give the two an identical-safe but "
+                             "distinct value" % (after[order[pos]],
+                                                 order[pos - 1], order[pos]))
+
     # 3) rewrite string_ids in sorted order, collecting the indices that moved
     perm = {}
     for pos, i in enumerate(order):

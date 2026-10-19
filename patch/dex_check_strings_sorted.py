@@ -46,7 +46,8 @@ WANT = ["https://instagram.com/pdev_labs",
         "Moss",
         "moss_boot",
         "moss_premium",
-        "https://github.com/pdev-labs/moss/issues/new"]
+        "https://github.com/pdev-labs/moss/issues/new",
+        "https://github.com/pdev-labs/moss/issues/new?"]
 GONE = ["https://instagram.com/sgnoogle",
         "https://x.com/sgnoogle",
         "https://youtube.com/@sgnoogle",
@@ -98,9 +99,15 @@ def main(path):
     def utf16(b):
         return mutf8_units(b)
 
-    bad = [i for i in range(1, ssize) if utf16(strings[i]) < utf16(strings[i - 1])]
+    bad = [i for i in range(1, ssize) if utf16(strings[i]) <= utf16(strings[i - 1])]
     if bad:
-        raise SystemExit("string_ids NOT sorted; first bad index %d" % bad[0])
+        i = bad[0]
+        a, b = strings[i - 1], strings[i]
+        if a == b:
+            raise SystemExit("string_ids has a DUPLICATE entry at %d (%r); ART "
+                             "requires strictly increasing order" % (i, a))
+        raise SystemExit("string_ids NOT sorted; first bad index %d (%r then %r)"
+                         % (i, a, b))
 
     ascii_strings = set()
     for b in strings:
