@@ -40,14 +40,22 @@ WANT = ["https://instagram.com/pdev_labs",
         "https://x.com/pdev_labs",
         "https://github.com/pdev-labs",
         "https://pdevlabs.me",
-        "RespiroLauncher/1.5 pdev.labs+moss@gmail.com",
-        "mailto:pdev.labs+moss@gmail.com"]
+        "MossLauncher/1.5 pdev.labs+moss@gmail.com",
+        "mailto:pdev.labs+moss@gmail.com",
+        "MossLauncher",
+        "Moss",
+        "moss_boot",
+        "moss_premium"]
 GONE = ["https://instagram.com/sgnoogle",
         "https://x.com/sgnoogle",
         "https://youtube.com/@sgnoogle",
         "https://sgnoogle.com",
         "RespiroLauncher/1.5 francesco.sgnaolin+respiro@gmail.com",
-        "mailto:francesco.sgnaolin+respiro@gmail.com"]
+        "mailto:francesco.sgnaolin+respiro@gmail.com",
+        "Respiro",
+        "RespiroLauncher",
+        "respiro_boot",
+        "respiro_premium"]
 
 
 def main(path):

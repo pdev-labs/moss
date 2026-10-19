@@ -57,14 +57,25 @@ jobs:
             --map "https://x.com/sgnoogle=https://x.com/pdev_labs" \
             --map "https://youtube.com/@sgnoogle=https://github.com/pdev-labs" \
             --map "https://sgnoogle.com=https://pdevlabs.me" \
-            --map "RespiroLauncher/1.5 francesco.sgnaolin+respiro@gmail.com=RespiroLauncher/1.5 pdev.labs+moss@gmail.com" \
-            --map "mailto:francesco.sgnaolin+respiro@gmail.com=mailto:pdev.labs+moss@gmail.com"
-          echo "final dex sha256:"; sha256sum work/classes-strings.dex
-          python3 patch/dex_check_strings_sorted.py work/classes-strings.dex
+            --map "RespiroLauncher/1.5 francesco.sgnaolin+respiro@gmail.com=MossLauncher/1.5 pdev.labs+moss@gmail.com" \
+            --map "mailto:francesco.sgnaolin+respiro@gmail.com=mailto:pdev.labs+moss@gmail.com" \
+            --map "Respiro=Moss" \
+            --map "RespiroLauncher=MossLauncher" \
+            --map "respiro_boot=moss_boot" \
+            --map "respiro_premium=moss_premium" \
+            --allow-id-refs
+          echo "renamed dex sha256:"; sha256sum work/classes-strings.dex
+          # The Privacy/Terms footer is `Text(privacy) Text("·") Text(terms)`; its label
+          # resources are blanked in the .arsc step, and this repoints the separator at
+          # the pool's empty string so the whole footer renders empty.
+          python3 patch/dex_retarget_const.py work/classes-strings.dex work/classes-strings2.dex \
+            --from "·" --to ""
+          echo "final dex sha256:"; sha256sum work/classes-strings2.dex
+          python3 patch/dex_check_strings_sorted.py work/classes-strings2.dex
 
       - name: Repack APK (swap classes.dex, drop old signature entries)
         run: |
-          python3 patch/repack_simple.py base-original.apk work/classes-strings.dex work/repacked.apk
+          python3 patch/repack_simple.py base-original.apk work/classes-strings2.dex work/repacked.apk
           python3 - <<'PY'
           import zipfile
           z = zipfile.ZipFile('work/repacked.apk')
@@ -84,14 +95,18 @@ jobs:
           echo "== manifest after rebrand =="
           python3 patch/rebrand_axml.py work/rebranded.apk --dump
 
-      - name: Rename string resources (Respiro -> Moss, Francesco -> pdev-labs)
+      - name: Rename string resources (Respiro -> Moss, drop the legal labels)
         run: |
           python3 patch/rebrand_strings.py work/rebranded.apk work/rebranded2.apk \
-            --old Respiro --new Moss --old Francesco --new pdev-labs
+            --old Respiro --new Moss --old Francesco --new pdev-labs \
+            --old "Privacy policy" --new "" --old "Terms of service" --new ""
           echo "== any 'Respiro' left? =="
           python3 patch/rebrand_strings.py work/rebranded2.apk --dump Respiro
           echo "== any 'Francesco' left? =="
           python3 patch/rebrand_strings.py work/rebranded2.apk --dump Francesco
+          echo "== privacy/terms labels gone? =="
+          python3 patch/rebrand_strings.py work/rebranded2.apk --dump "Privacy policy"
+          python3 patch/rebrand_strings.py work/rebranded2.apk --dump "Terms of service"
 
       - name: Swap YouTube icon for a GitHub mark
         run: |

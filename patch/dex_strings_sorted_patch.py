@@ -244,6 +244,128 @@ def remap_id_tables(d, perm):
     return touched
 
 
+# ------------------------------------------------- encoded values (annotations)
+
+def _fix_uleb(d, pos, perm, state):
+    v, plen, _ = read_uleb128(d, pos)
+    if v in perm:
+        nb = enc_uleb128(perm[v])
+        if len(nb) != plen:
+            raise SystemExit("encoded reference at 0x%x would change length "
+                             "(%d -> %d bytes)" % (pos, plen, len(nb)))
+        d[pos:pos + plen] = nb
+        state[0] += 1
+    return v
+
+
+def _fix_index(d, pos, width, perm, state):
+    v = int.from_bytes(bytes(d[pos:pos + width]), "little")
+    if v in perm:
+        nv = perm[v]
+        if nv >= (1 << (8 * width)):
+            raise SystemExit("encoded reference at 0x%x does not fit in %d bytes"
+                             % (pos, width))
+        d[pos:pos + width] = nv.to_bytes(width, "little")
+        state[0] += 1
+
+
+def _walk_encoded_value(d, p, perm, state):
+    """Advance past one encoded_value, remapping VALUE_STRING indices."""
+    header = d[p]
+    p += 1
+    vt = header & 0x1F
+    va = (header >> 5) & 0x7
+    if vt in (0x00, 0x02, 0x03, 0x04, 0x06, 0x10, 0x11,
+              0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B):
+        # value_arg + 1 bytes, little endian; for the index types the stored
+        # value is a *string index* only for VALUE_STRING (0x17).
+        width = va + 1
+        if vt == 0x17:
+            _fix_index(d, p, width, perm, state)
+        return p + width
+    if vt == 0x1C:                           # VALUE_ARRAY
+        size, _, p = read_uleb128(d, p)
+        for _ in range(size):
+            p = _walk_encoded_value(d, p, perm, state)
+        return p
+    if vt == 0x1D:                           # VALUE_ANNOTATION
+        return _walk_encoded_annotation(d, p, perm, state)
+    if vt in (0x1E, 0x1F):                   # VALUE_NULL / VALUE_BOOLEAN
+        return p
+    raise SystemExit("unknown encoded_value type 0x%02x at 0x%x" % (vt, p - 1))
+
+
+def _walk_encoded_annotation(d, p, perm, state):
+    _, _, p = read_uleb128(d, p)             # type_idx (a type, not a string idx)
+    size, _, p = read_uleb128(d, p)
+    for _ in range(size):
+        _fix_uleb(d, p, perm, state)         # element name_idx
+        _, plen, _ = read_uleb128(d, p)
+        p += plen
+        p = _walk_encoded_value(d, p, perm, state)
+    return p
+
+
+def _walk_encoded_array(d, off, perm, state):
+    size, _, p = read_uleb128(d, off)
+    for _ in range(size):
+        p = _walk_encoded_value(d, p, perm, state)
+
+
+def _walk_annotation_set(d, off, perm, state):
+    size = u32(d, off)
+    for i in range(size):
+        aoff = u32(d, off + 4 + 4 * i)
+        _walk_encoded_annotation(d, aoff + 1, perm, state)   # +1 visibility byte
+
+
+def _walk_annotations_directory(d, off, perm, state):
+    class_anno = u32(d, off)
+    if class_anno:
+        _walk_annotation_set(d, class_anno, perm, state)
+    fs, ms, ps = u32(d, off + 4), u32(d, off + 8), u32(d, off + 12)
+    p = off + 16
+    for _ in range(fs + ms + ps):
+        aoff = u32(d, p + 4)
+        p += 8
+        if aoff:
+            _walk_annotation_set(d, aoff, perm, state)
+
+
+def _map_section(d, type_code):
+    """Return (size, offset) of a section from the dex map_list, or (0, 0)."""
+    map_off = u32(d, 0x34)
+    if not map_off:
+        return 0, 0
+    n = u32(d, map_off)
+    for i in range(n):
+        e = map_off + 4 + 12 * i
+        if struct.unpack_from("<H", d, e)[0] == type_code:
+            return u32(d, e + 4), u32(d, e + 8)
+    return 0, 0
+
+
+def remap_encoded(d, perm):
+    """Remap string indices inside annotations, static values and call sites."""
+    state = [0]
+    cd_size = u32(d, 0x60)
+    cd_off = u32(d, 0x64)
+    for i in range(cd_size):
+        base = cd_off + 32 * i
+        anno_off = u32(d, base + 20)         # annotations_off
+        if anno_off:
+            _walk_annotations_directory(d, anno_off, perm, state)
+        sv_off = u32(d, base + 28)           # static_values_off
+        if sv_off:
+            _walk_encoded_array(d, sv_off, perm, state)
+    cs_size, cs_off = _map_section(d, 0x0007)   # TYPE_CALL_SITE_ID_ITEM
+    for i in range(cs_size):
+        item_off = u32(d, cs_off + 4 * i)
+        if item_off:
+            _walk_encoded_array(d, item_off, perm, state)
+    return state[0]
+
+
 # ------------------------------------------------------------------ the patch
 
 def patch(d, mapping):
@@ -308,9 +430,10 @@ def patch(d, mapping):
     # 4) remap every reference to a moved index
     code_hits = remap_const_strings(d, perm)
     id_hits = remap_id_tables(d, perm)
+    enc_hits = remap_encoded(d, perm)
 
     fix_header(d)
-    return len(changed), code_hits, (ssize, len(perm), id_hits)
+    return len(changed), code_hits, (ssize, len(perm), id_hits, enc_hits)
 
 
 def main(argv):
@@ -318,6 +441,8 @@ def main(argv):
     ap.add_argument("dex")
     ap.add_argument("out")
     ap.add_argument("--map", action="append", default=[])
+    ap.add_argument("--allow-id-refs", action="store_true",
+                    help="permit non-code references to moved strings (verify the result)")
     args = ap.parse_args(argv[1:])
 
     d = bytearray(open(args.dex, "rb").read())
@@ -338,13 +463,15 @@ def main(argv):
     if not changed:
         print("no strings changed")
         return 0
-    total, nmoved, id_hits = info
+    total, nmoved, id_hits, enc_hits = info
     print("strings replaced: %d" % changed)
     print("string_ids entries re-ordered: %d of %d" % (nmoved, total))
-    print("const-string operands remapped: %d   id-table refs remapped: %d"
-          % (code_hits, id_hits))
-    if id_hits:
-        raise SystemExit("unexpected non-code reference to a moved string; aborting")
+    print("const-string operands remapped: %d" % code_hits)
+    print("id-table refs remapped: %d   encoded refs remapped: %d"
+          % (id_hits, enc_hits))
+    if (id_hits or enc_hits) and not getattr(args, "allow_id_refs", False):
+        raise SystemExit("non-code references to moved strings were remapped; "
+                         "re-run with --allow-id-refs after verifying the result")
     print("wrote %s" % args.out)
     return 0
 
